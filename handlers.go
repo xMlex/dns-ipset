@@ -116,8 +116,6 @@ func cacheExpireHandle(cache dnsCache.Cache) {
 				if !ok {
 					return
 				}
-				slog.Debug("cacheExpireHandle: " + exp.Domain)
-
 				req.SetQuestion(dns.Fqdn(exp.Domain), exp.ReqType)
 				exchangeMsg := &DnsExchangeMessage{
 					Message:    req,

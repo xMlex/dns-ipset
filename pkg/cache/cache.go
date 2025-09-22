@@ -43,6 +43,7 @@ type impl struct {
 	notifyInt     time.Duration
 	janitorInt    time.Duration
 	maxExpiredAge time.Duration
+	minExpiredAge time.Duration
 	mt            sync.Mutex
 
 	stopJanitor   chan struct{}
@@ -60,6 +61,7 @@ type Options struct {
 	NotifyInterval  time.Duration // min interval between expiry notifications per entry (default 5s)
 	JanitorInterval time.Duration // how often janitor runs (default 1m)
 	MaxExpiredAge   time.Duration // how long an entry may stay expired before janitor deletes it (default 10m)
+	MinExpiredAge   time.Duration
 }
 
 const (
@@ -67,6 +69,7 @@ const (
 	defaultNotifyInterval  = 5 * time.Second
 	defaultJanitorInterval = 1 * time.Minute
 	defaultMaxExpiredAge   = 60 * time.Minute
+	defaultMinExpiredAge   = 5 * time.Minute
 )
 
 // New creates new Cache implementation.
@@ -94,6 +97,10 @@ func New(opts Options) Cache {
 	if maxAge <= 0 {
 		maxAge = defaultMaxExpiredAge
 	}
+	minAge := opts.MinExpiredAge
+	if minAge <= 0 {
+		maxAge = defaultMinExpiredAge
+	}
 
 	c := &impl{
 		shards:        make([]*cacheShard, shards),
@@ -101,6 +108,7 @@ func New(opts Options) Cache {
 		notifyInt:     notify,
 		janitorInt:    janitor,
 		maxExpiredAge: maxAge,
+		minExpiredAge: minAge,
 		stopJanitor:   make(chan struct{}),
 	}
 	for i := range c.shards {
@@ -141,7 +149,7 @@ func (c *impl) Set(reqType uint16, domain string, rr []dns.RR, ttl time.Duration
 		ttlResult = time.Duration(minTtl) * time.Second
 	}
 	if ttlResult <= 0 {
-		ttlResult = defaultMaxExpiredAge
+		ttlResult = c.minExpiredAge
 	}
 
 	expires = time.Now().Add(ttlResult)
