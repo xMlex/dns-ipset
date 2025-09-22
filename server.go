@@ -42,11 +42,12 @@ func parseQuery(m *dns.Msg) {
 		r, err := Lookup(m)
 		if err == nil {
 			m.Answer = r.Answer
-			cache.Set(q.Qtype, q.Name, m.Answer)
+			cache.Set(q.Qtype, q.Name, m.Answer, 0)
 			_ = ipSet.Set(q.Name[:len(q.Name)-1], m.Answer)
 			if err != nil {
 				fmt.Printf("failed to ipSet : %v\n", err)
 			}
+			fmt.Printf("ok %s\n", q.Name)
 		} else {
 			fmt.Printf("failed to exchange: %v\n", err)
 		}
@@ -81,9 +82,12 @@ func Lookup(m *dns.Msg) (*dns.Msg, error) {
 
 	select {
 	case r := <-res:
+		for _, rr := range r.Answer {
+			rr.Header().Ttl = 10
+		}
 		return r, nil
 	case <-ticker.C:
-		return nil, errors.New("can't resolve ip for " + qName + " by timeout")
+		return nil, errors.New("[lookup] can't resolve ip for " + qName + " by timeout")
 	}
 }
 
@@ -92,11 +96,11 @@ func addResolvedByAnswer(nameserver string, err error, qName string, r *dns.Msg)
 	if err != nil {
 		rr.Header().Ttl = 15
 	}
-	for i, rrA := range r.Answer {
-		if rrA.Header().Ttl > 600 {
-			r.Answer[i].Header().Ttl = 600
-		}
-		r.Answer[i].Header().Ttl += 10
-	}
+	//for i, rrA := range r.Answer {
+	//	if rrA.Header().Ttl > 600 {
+	//		r.Answer[i].Header().Ttl = 600
+	//	}
+	//	r.Answer[i].Header().Ttl += 10
+	//}
 	r.Answer = append(r.Answer, rr)
 }

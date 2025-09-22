@@ -23,7 +23,7 @@ type DnsExchangeMessage struct {
 
 func NewDnsHandler(NameServerAddrs []string) *DnsHandler {
 	res := &DnsHandler{}
-	res.msgChan = make(chan *DnsExchangeMessage, len(NameServerAddrs))
+	res.msgChan = make(chan *DnsExchangeMessage, len(NameServerAddrs)*2)
 	res.clients = make(map[string][]*dns.Client)
 
 	for _, srvAddr := range NameServerAddrs {
@@ -35,7 +35,7 @@ func NewDnsHandler(NameServerAddrs []string) *DnsHandler {
 			addr = srvAddr[:idx+4]
 			tlsServerName = srvAddr[idx+5:]
 		}
-		res.clients[addr] = make([]*dns.Client, 32)
+		res.clients[addr] = make([]*dns.Client, 2)
 		for i := 0; i < len(res.clients[addr]); i++ {
 			res.clients[addr][i] = &dns.Client{
 				Net:          net,
