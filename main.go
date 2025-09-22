@@ -3,10 +3,10 @@ package main
 import (
 	dnsCache "dns-ipset/pkg/cache"
 	"flag"
-	"github.com/miekg/dns"
 	"log"
-	"log/slog"
 	"strconv"
+
+	"github.com/miekg/dns"
 )
 
 var configFile = flag.String("c", "config.yaml", "configuration file")
@@ -18,27 +18,8 @@ var cache dnsCache.Cache
 
 func main() {
 	cache = dnsCache.New(dnsCache.Options{})
-	chExpire := make(chan *dnsCache.NotifyExpire, 10)
-	cache.NotifyExpire(chExpire)
-	go func() {
-		for {
-			select {
-			case exp := <-chExpire:
-				slog.Info("expire expired " + exp.Domain)
-				res := make(chan *dns.Msg, 1)
-				req := new(dns.Msg)
-				req.SetQuestion(dns.Fqdn(exp.Domain), exp.ReqType)
-				exchangeMsg := &DnsExchangeMessage{
-					Message:    req,
-					ReturnChan: res,
-				}
-				DnsExchangeHandler.Handle(exchangeMsg)
-				r := <-res
-				cache.Set(exp.ReqType, exp.Domain, r.Answer, 0)
-			}
-		}
-
-	}()
+	defer cache.Close()
+	cacheExpireHandle(cache)
 
 	flag.Parse()
 	var err error

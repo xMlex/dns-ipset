@@ -67,7 +67,7 @@ const (
 	defaultShards          = 256
 	defaultNotifyInterval  = 5 * time.Second
 	defaultJanitorInterval = 1 * time.Minute
-	defaultMaxExpiredAge   = 10 * time.Minute
+	defaultMaxExpiredAge   = 60 * time.Minute
 )
 
 // New creates new Cache implementation.
@@ -132,17 +132,18 @@ func (c *impl) Set(reqType uint16, domain string, rr []dns.RR, ttl time.Duration
 
 	if ttl > 0 {
 		ttlResult = ttl
-
 	} else {
 		minTtl := rr[0].Header().Ttl
 		for _, d := range rr {
-			if d.Header().Ttl < minTtl {
+			if d.Header().Ttl > 0 && d.Header().Ttl < minTtl {
 				minTtl = d.Header().Ttl
 			}
 		}
+		ttlResult = time.Duration(minTtl) * time.Second
 	}
 	if ttlResult <= 0 {
-		ttlResult = time.Second * 10
+		ttlResult = defaultMaxExpiredAge
+		slog.Warn("TTL <= 0; setting TTL to default max expired age", "domain", domain)
 	}
 
 	expires = time.Now().Add(ttlResult)
@@ -167,6 +168,9 @@ func (c *impl) Get(reqType uint16, domain string) []dns.RR {
 		return nil
 	}
 	e.updateAccess(now)
+	for i, _ := range e.value {
+		e.value[i].Header().Ttl = uint32(e.expiresAt.Sub(now).Seconds())
+	}
 	if !e.expiresAt.IsZero() && now.After(e.expiresAt) {
 		c.maybeNotify(reqType, domain, e, now)
 	}
@@ -176,13 +180,17 @@ func (c *impl) Get(reqType uint16, domain string) []dns.RR {
 func (c *impl) maybeNotify(reqType uint16, domain string, e *entry, now time.Time) {
 	last := atomic.LoadInt64(&e.lastNotify)
 	if now.UnixNano()-last < c.notifyInt.Nanoseconds() {
-		slog.Info("skip notify")
 		return
 	}
 	if atomic.CompareAndSwapInt64(&e.lastNotify, last, now.UnixNano()) {
 		ev := &NotifyExpire{ReqType: reqType, Domain: domain}
 		c.mt.Lock()
 		defer c.mt.Unlock()
+		for i, _ := range e.value {
+			if e.value[i].Header().Ttl < 20 {
+				e.value[i].Header().Ttl = 20
+			}
+		}
 		for _, sh := range c.notifyExpires {
 			select {
 			case sh <- ev:
@@ -206,6 +214,10 @@ func (c *impl) runJanitor() {
 		sh.mu.Lock()
 		for k, e := range sh.m {
 			if e.expiresAt.IsZero() {
+				continue
+			}
+			accessTime := time.Unix(0, e.accessAt.Load())
+			if accessTime.After(threshold) {
 				continue
 			}
 			if e.expiresAt.Before(threshold) {

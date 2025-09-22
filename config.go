@@ -1,12 +1,14 @@
 package main
 
 import (
-	"github.com/fsnotify/fsnotify"
-	"gopkg.in/yaml.v3"
 	"io/ioutil"
 	"log"
+	"log/slog"
 	"os"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
@@ -40,6 +42,11 @@ func loadConfig() (*Config, error) {
 	if config.ConfigUpdate {
 		go configWatcher()
 	}
+
+	if config.Debug {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
+	}
+
 	return config, nil
 }
 

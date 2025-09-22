@@ -10,6 +10,14 @@ import (
 )
 
 func parseQuery(m *dns.Msg) {
+	defer func() {
+		for _, q := range m.Question {
+			err := ipSet.Set(q.Name[:len(q.Name)-1], m.Answer)
+			if err != nil {
+				fmt.Printf("failed to ipSet : %v\n", err)
+			}
+		}
+	}()
 	for _, q := range m.Question {
 		//log.Printf("Query for %s as %d\n", q.Name, q.Qtype)
 		processed := false
@@ -43,11 +51,6 @@ func parseQuery(m *dns.Msg) {
 		if err == nil {
 			m.Answer = r.Answer
 			cache.Set(q.Qtype, q.Name, m.Answer, 0)
-			_ = ipSet.Set(q.Name[:len(q.Name)-1], m.Answer)
-			if err != nil {
-				fmt.Printf("failed to ipSet : %v\n", err)
-			}
-			fmt.Printf("ok %s\n", q.Name)
 		} else {
 			fmt.Printf("failed to exchange: %v\n", err)
 		}
@@ -82,9 +85,6 @@ func Lookup(m *dns.Msg) (*dns.Msg, error) {
 
 	select {
 	case r := <-res:
-		for _, rr := range r.Answer {
-			rr.Header().Ttl = 10
-		}
 		return r, nil
 	case <-ticker.C:
 		return nil, errors.New("[lookup] can't resolve ip for " + qName + " by timeout")
@@ -93,14 +93,6 @@ func Lookup(m *dns.Msg) (*dns.Msg, error) {
 
 func addResolvedByAnswer(nameserver string, err error, qName string, r *dns.Msg) {
 	rr, err := dns.NewRR(fmt.Sprintf("%s TXT %s", "dns.resolved.via", nameserver))
-	if err != nil {
-		rr.Header().Ttl = 15
-	}
-	//for i, rrA := range r.Answer {
-	//	if rrA.Header().Ttl > 600 {
-	//		r.Answer[i].Header().Ttl = 600
-	//	}
-	//	r.Answer[i].Header().Ttl += 10
-	//}
+	rr.Header().Ttl = 0
 	r.Answer = append(r.Answer, rr)
 }
