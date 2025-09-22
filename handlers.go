@@ -25,6 +25,18 @@ type DnsExchangeMessage struct {
 	retryCount int
 }
 
+// NewDnsHandler creates and returns a DnsHandler configured for the provided name server addresses.
+// 
+// It initializes internal channels and client maps, starts the retry worker, and spawns a worker
+// goroutine for each configured dns client.
+//
+// NameServerAddrs is a slice of server addresses. Addresses containing the suffix ":853" are
+// treated as DNS-over-TLS endpoints: the client `Net` is set to "tcp-tls", the address used for
+// exchanges is truncated to include the port, and the substring after ":853" is used as the
+// TLS ServerName. For all clients the read/write timeouts are set to 5s and TLS verification is
+// enabled (InsecureSkipVerify=false).
+//
+// The returned DnsHandler is ready to accept DnsExchangeMessage values via its Handle method.
 func NewDnsHandler(NameServerAddrs []string) *DnsHandler {
 	res := &DnsHandler{}
 	res.msgChan = make(chan *DnsExchangeMessage, len(NameServerAddrs)*2)
@@ -104,6 +116,16 @@ func (h *DnsHandler) runWorker(client *dns.Client, srvAddr string) {
 	}()
 }
 
+// cacheExpireHandle registers for cache expiration notifications and starts a goroutine
+// that refreshes expired DNS entries.
+//
+// When the provided cache emits an expiration (via NotifyExpire), this function issues
+// a fresh DNS query for the expired domain/type through the global DnsExchangeHandler
+// and writes the resulting answers back into the cache. The refresh is performed
+// asynchronously in a dedicated goroutine; each expiration is handled by sending a
+// DnsExchangeMessage to DnsExchangeHandler and waiting for its response before calling
+// cache.Set to update the entry. The function returns immediately after registering
+// the expiration channel.
 func cacheExpireHandle(cache dnsCache.Cache) {
 	chExpire := make(chan *dnsCache.NotifyExpire)
 	cache.NotifyExpire(chExpire)

@@ -22,6 +22,12 @@ type Config struct {
 	UpdateInterval time.Duration       `yaml:"updateInterval"`
 }
 
+// loadConfig loads and parses the YAML configuration file referenced by the global `configFile`
+// and returns the populated Config.
+//
+// It returns a non-nil error if the file does not exist, cannot be read, or contains invalid YAML.
+// If the loaded Config has ConfigUpdate set true, a background configWatcher goroutine is started.
+// If Debug is true, the global slog logger level is set to debug.
 func loadConfig() (*Config, error) {
 	config := &Config{}
 
