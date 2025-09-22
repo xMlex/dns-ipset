@@ -64,7 +64,7 @@ func (h *DnsHandler) runWorker(client *dns.Client, srvAddr string) {
 		for msg := range h.msgChan {
 			in, _, err := client.Exchange(msg.Message, srvAddr)
 			if err != nil {
-				if msg.retryCount <= 3 {
+				if msg.retryCount < 3 {
 					log.Printf("DNS[%s] Exchange error[%d]: %s for %s", srvAddr, msg.retryCount, err, msg.Message.Question[0].Name)
 					msg.retryCount++
 					h.msgChan <- msg

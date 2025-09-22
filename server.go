@@ -4,10 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/miekg/dns"
 )
+
+var dnsMsgPool = sync.Pool{New: func() any { return &dns.Msg{} }}
 
 func parseQuery(m *dns.Msg) {
 	defer func() {
@@ -58,7 +61,8 @@ func parseQuery(m *dns.Msg) {
 }
 
 func handleDnsRequest(w dns.ResponseWriter, r *dns.Msg) {
-	m := new(dns.Msg)
+	m := dnsMsgPool.Get().(*dns.Msg)
+	defer dnsMsgPool.Put(m)
 	m.SetReply(r)
 	parseQuery(m)
 	_ = w.WriteMsg(m)
