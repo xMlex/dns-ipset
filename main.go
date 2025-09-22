@@ -16,6 +16,7 @@ var ipSet = NewIpSet()
 // var cache = NewMemoryCache()
 var cache dnsCache.Cache
 
+// - starts the server and defers its shutdown (logs and exits on start failure).
 func main() {
 	cache = dnsCache.New(dnsCache.Options{})
 	defer cache.Close()

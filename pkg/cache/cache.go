@@ -72,7 +72,19 @@ const (
 	defaultMinExpiredAge   = 5 * time.Minute
 )
 
-// New creates new Cache implementation.
+// New returns a new Cache implementation configured by opts.
+// 
+// Options are normalized and defaults applied when zero or negative:
+//
+// - Shards is rounded up to the next power of two (default 256).
+// - NotifyInterval defaults to 5s.
+// - JanitorInterval defaults to 1m.
+// - MaxExpiredAge defaults to 60m.
+// - MinExpiredAge defaults to 5m.
+//
+// The returned Cache uses sharded in-memory storage, starts a background
+// janitor goroutine to purge old entries, and begins accepting Set/Get calls
+// immediately. Call Close on the Cache to stop the janitor and release resources.
 func New(opts Options) Cache {
 	shards := opts.Shards
 	if shards == 0 {
@@ -118,6 +130,9 @@ func New(opts Options) Cache {
 	return c
 }
 
+// makeKey returns the cache map key for the given DNS request type and domain.
+// The key is the domain followed by ':' and the reqType encoded as a single rune (converted to a string).
+// Example: domain "example.com" and reqType 1 produce "example.com:<rune(1)>".
 func makeKey(reqType uint16, domain string) string {
 	return domain + ":" + string(rune(reqType))
 }
