@@ -1,9 +1,10 @@
 package cache
 
 import (
-	"github.com/miekg/dns"
 	"testing"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 func TestCacheSetGet(t *testing.T) {
@@ -11,9 +12,9 @@ func TestCacheSetGet(t *testing.T) {
 	defer c.Close()
 
 	rr, _ := dns.NewRR("example.com. 1 IN A 1.2.3.4")
-	c.Set(dns.TypeA, "example.com.", rr, 50*time.Millisecond)
+	c.Set(dns.TypeA, "example.com.", []dns.RR{rr}, 50*time.Millisecond)
 	got := c.Get(dns.TypeA, "example.com.")
-	if got == nil || got.String() != rr.String() {
+	if got == nil || got[0].String() != rr.String() {
 		t.Fatalf("expected %v, got %v", rr, got)
 	}
 }
@@ -23,7 +24,7 @@ func TestCacheExpireNotify(t *testing.T) {
 	defer c.Close()
 
 	rr, _ := dns.NewRR("expired.com. 1 IN A 1.1.1.1")
-	c.Set(dns.TypeA, "expired.com.", rr, 1*time.Millisecond)
+	c.Set(dns.TypeA, "expired.com.", []dns.RR{rr}, 1*time.Millisecond)
 	receiver := make(chan *NotifyExpire, 1)
 	c.NotifyExpire(receiver)
 
@@ -45,7 +46,7 @@ func BenchmarkCacheContention(b *testing.B) {
 	defer c.Close()
 
 	rr, _ := dns.NewRR("bench.com. 60 IN A 9.9.9.9")
-	c.Set(dns.TypeA, "bench.com.", rr, time.Minute)
+	c.Set(dns.TypeA, "bench.com.", []dns.RR{rr}, time.Minute)
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
