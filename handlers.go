@@ -2,7 +2,10 @@ package main
 
 import (
 	"crypto/tls"
+	dnsCache "dns-ipset/pkg/cache"
+	"fmt"
 	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -12,19 +15,22 @@ import (
 var DnsExchangeHandler *DnsHandler
 
 type DnsHandler struct {
-	clients map[string][]*dns.Client
-	msgChan chan *DnsExchangeMessage
+	clients   map[string][]*dns.Client
+	msgChan   chan *DnsExchangeMessage
+	retryChan chan *DnsExchangeMessage
 }
 type DnsExchangeMessage struct {
-	Message     *dns.Msg
-	ReturnChan  chan *dns.Msg
-	returnCount int
+	Message    *dns.Msg
+	ReturnChan chan *dns.Msg
+	retryCount int
 }
 
 func NewDnsHandler(NameServerAddrs []string) *DnsHandler {
 	res := &DnsHandler{}
-	res.msgChan = make(chan *DnsExchangeMessage, len(NameServerAddrs))
+	res.msgChan = make(chan *DnsExchangeMessage, len(NameServerAddrs)*2)
+	res.retryChan = make(chan *DnsExchangeMessage, 256)
 	res.clients = make(map[string][]*dns.Client)
+	res.runWorkerRetry()
 
 	for _, srvAddr := range NameServerAddrs {
 		net := "udp"
@@ -35,12 +41,12 @@ func NewDnsHandler(NameServerAddrs []string) *DnsHandler {
 			addr = srvAddr[:idx+4]
 			tlsServerName = srvAddr[idx+5:]
 		}
-		res.clients[addr] = make([]*dns.Client, 32)
+		res.clients[addr] = make([]*dns.Client, 1)
 		for i := 0; i < len(res.clients[addr]); i++ {
 			res.clients[addr][i] = &dns.Client{
 				Net:          net,
-				ReadTimeout:  time.Millisecond * 4500,
-				WriteTimeout: time.Millisecond * 4500,
+				ReadTimeout:  time.Millisecond * 5000,
+				WriteTimeout: time.Millisecond * 5000,
 				TLSConfig: &tls.Config{
 					ServerName:         tlsServerName,
 					InsecureSkipVerify: false,
@@ -56,15 +62,26 @@ func (h *DnsHandler) Handle(exchangeMessage *DnsExchangeMessage) {
 	h.msgChan <- exchangeMessage
 }
 
+func (h *DnsHandler) runWorkerRetry() {
+	go func() {
+		for msg := range h.retryChan {
+			select {
+			case h.msgChan <- msg:
+			}
+		}
+	}()
+}
+
 func (h *DnsHandler) runWorker(client *dns.Client, srvAddr string) {
 	go func() {
 		for msg := range h.msgChan {
 			in, _, err := client.Exchange(msg.Message, srvAddr)
 			if err != nil {
-				if msg.returnCount <= 3 {
-					log.Printf("DNS[%s] Exchange error[%d]: %s for %s", srvAddr, msg.returnCount, err, msg.Message.Question[0].Name)
-					//msg.returnCount++
-					//h.msgChan <- msg // return msg
+				if msg.retryCount < 3 {
+					log.Printf("DNS[%s] Exchange error[%d]: %s for %s", srvAddr, msg.retryCount, err, msg.Message.Question[0].Name)
+					msg.retryCount++
+					h.retryChan <- msg
+					slog.Info("Retry")
 				} else {
 					log.Printf("DNS[%s] Exchange[error]: %s", srvAddr, err)
 				}
@@ -77,6 +94,37 @@ func (h *DnsHandler) runWorker(client *dns.Client, srvAddr string) {
 			}
 			addResolvedByAnswer(srvAddr, err, in.Question[0].Name, in)
 			msg.ReturnChan <- in
+
+			name := in.Question[0].Name
+			err = ipSet.Set(name[:len(name)-1], in.Answer)
+			if err != nil {
+				fmt.Printf("failed to ipSet : %v\n", err)
+			}
+		}
+	}()
+}
+
+func cacheExpireHandle(cache dnsCache.Cache) {
+	chExpire := make(chan *dnsCache.NotifyExpire)
+	cache.NotifyExpire(chExpire)
+	go func() {
+		res := make(chan *dns.Msg, 1)
+		req := new(dns.Msg)
+		for {
+			select {
+			case exp, ok := <-chExpire:
+				if !ok {
+					return
+				}
+				req.SetQuestion(dns.Fqdn(exp.Domain), exp.ReqType)
+				exchangeMsg := &DnsExchangeMessage{
+					Message:    req,
+					ReturnChan: res,
+				}
+				DnsExchangeHandler.Handle(exchangeMsg)
+				r := <-res
+				cache.Set(exp.ReqType, exp.Domain, r.Answer, 0)
+			}
 		}
 	}()
 }

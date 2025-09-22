@@ -1,19 +1,26 @@
 package main
 
 import (
+	dnsCache "dns-ipset/pkg/cache"
 	"flag"
-	"github.com/miekg/dns"
 	"log"
 	"strconv"
+
+	"github.com/miekg/dns"
 )
 
 var configFile = flag.String("c", "config.yaml", "configuration file")
 var config = &Config{}
 var ipSet = NewIpSet()
 
-var cache = NewMemoryCache()
+// var cache = NewMemoryCache()
+var cache dnsCache.Cache
 
 func main() {
+	cache = dnsCache.New(dnsCache.Options{})
+	defer cache.Close()
+	cacheExpireHandle(cache)
+
 	flag.Parse()
 	var err error
 	config, err = loadConfig()

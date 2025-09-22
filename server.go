@@ -4,12 +4,23 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/miekg/dns"
 )
 
+var dnsMsgPool = sync.Pool{New: func() any { return &dns.Msg{} }}
+
 func parseQuery(m *dns.Msg) {
+	defer func() {
+		for _, q := range m.Question {
+			err := ipSet.Set(q.Name[:len(q.Name)-1], m.Answer)
+			if err != nil {
+				fmt.Printf("failed to ipSet : %v\n", err)
+			}
+		}
+	}()
 	for _, q := range m.Question {
 		//log.Printf("Query for %s as %d\n", q.Name, q.Qtype)
 		processed := false
@@ -42,11 +53,7 @@ func parseQuery(m *dns.Msg) {
 		r, err := Lookup(m)
 		if err == nil {
 			m.Answer = r.Answer
-			cache.Set(q.Qtype, q.Name, m.Answer)
-			_ = ipSet.Set(q.Name[:len(q.Name)-1], m.Answer)
-			if err != nil {
-				fmt.Printf("failed to ipSet : %v\n", err)
-			}
+			cache.Set(q.Qtype, q.Name, m.Answer, 0)
 		} else {
 			fmt.Printf("failed to exchange: %v\n", err)
 		}
@@ -54,15 +61,15 @@ func parseQuery(m *dns.Msg) {
 }
 
 func handleDnsRequest(w dns.ResponseWriter, r *dns.Msg) {
-	m := new(dns.Msg)
+	m := &dns.Msg{}
 	m.SetReply(r)
 	parseQuery(m)
 	_ = w.WriteMsg(m)
 }
 
 func Lookup(m *dns.Msg) (*dns.Msg, error) {
+	req := &dns.Msg{}
 
-	req := new(dns.Msg)
 	req.SetReply(m)
 	req.Response = false
 
@@ -76,27 +83,19 @@ func Lookup(m *dns.Msg) (*dns.Msg, error) {
 	}
 	DnsExchangeHandler.Handle(exchangeMsg)
 
-	ticker := time.NewTicker(time.Millisecond * 6300)
+	ticker := time.NewTicker(time.Millisecond * 6000)
 	defer ticker.Stop()
 
 	select {
 	case r := <-res:
 		return r, nil
 	case <-ticker.C:
-		return nil, errors.New("can't resolve ip for " + qName + " by timeout")
+		return nil, errors.New("[lookup] can't resolve ip for " + qName + " by timeout")
 	}
 }
 
 func addResolvedByAnswer(nameserver string, err error, qName string, r *dns.Msg) {
 	rr, err := dns.NewRR(fmt.Sprintf("%s TXT %s", "dns.resolved.via", nameserver))
-	if err != nil {
-		rr.Header().Ttl = 15
-	}
-	for i, rrA := range r.Answer {
-		if rrA.Header().Ttl > 600 {
-			r.Answer[i].Header().Ttl = 600
-		}
-		r.Answer[i].Header().Ttl += 10
-	}
+	rr.Header().Ttl = 0
 	r.Answer = append(r.Answer, rr)
 }
