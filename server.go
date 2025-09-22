@@ -39,8 +39,6 @@ func parseQuery(m *dns.Msg) {
 					}
 				}
 			}
-		case dns.TypeCNAME:
-
 		}
 		if processed {
 			continue
