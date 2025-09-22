@@ -39,6 +39,8 @@ func parseQuery(m *dns.Msg) {
 					}
 				}
 			}
+		case dns.TypeCNAME:
+
 		}
 		if processed {
 			continue
@@ -61,16 +63,15 @@ func parseQuery(m *dns.Msg) {
 }
 
 func handleDnsRequest(w dns.ResponseWriter, r *dns.Msg) {
-	m := dnsMsgPool.Get().(*dns.Msg)
-	defer dnsMsgPool.Put(m)
+	m := &dns.Msg{}
 	m.SetReply(r)
 	parseQuery(m)
 	_ = w.WriteMsg(m)
 }
 
 func Lookup(m *dns.Msg) (*dns.Msg, error) {
+	req := &dns.Msg{}
 
-	req := new(dns.Msg)
 	req.SetReply(m)
 	req.Response = false
 
@@ -84,7 +85,7 @@ func Lookup(m *dns.Msg) (*dns.Msg, error) {
 	}
 	DnsExchangeHandler.Handle(exchangeMsg)
 
-	ticker := time.NewTicker(time.Millisecond * 6300)
+	ticker := time.NewTicker(time.Millisecond * 6000)
 	defer ticker.Stop()
 
 	select {

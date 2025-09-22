@@ -2,7 +2,6 @@ package cache
 
 import (
 	"hash/fnv"
-	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -143,7 +142,6 @@ func (c *impl) Set(reqType uint16, domain string, rr []dns.RR, ttl time.Duration
 	}
 	if ttlResult <= 0 {
 		ttlResult = defaultMaxExpiredAge
-		slog.Warn("TTL <= 0; setting TTL to default max expired age", "domain", domain)
 	}
 
 	expires = time.Now().Add(ttlResult)

@@ -15,8 +15,9 @@ import (
 var DnsExchangeHandler *DnsHandler
 
 type DnsHandler struct {
-	clients map[string][]*dns.Client
-	msgChan chan *DnsExchangeMessage
+	clients   map[string][]*dns.Client
+	msgChan   chan *DnsExchangeMessage
+	retryChan chan *DnsExchangeMessage
 }
 type DnsExchangeMessage struct {
 	Message    *dns.Msg
@@ -27,7 +28,9 @@ type DnsExchangeMessage struct {
 func NewDnsHandler(NameServerAddrs []string) *DnsHandler {
 	res := &DnsHandler{}
 	res.msgChan = make(chan *DnsExchangeMessage, len(NameServerAddrs)*2)
+	res.retryChan = make(chan *DnsExchangeMessage, 256)
 	res.clients = make(map[string][]*dns.Client)
+	res.runWorkerRetry()
 
 	for _, srvAddr := range NameServerAddrs {
 		net := "udp"
@@ -38,7 +41,7 @@ func NewDnsHandler(NameServerAddrs []string) *DnsHandler {
 			addr = srvAddr[:idx+4]
 			tlsServerName = srvAddr[idx+5:]
 		}
-		res.clients[addr] = make([]*dns.Client, 4)
+		res.clients[addr] = make([]*dns.Client, 1)
 		for i := 0; i < len(res.clients[addr]); i++ {
 			res.clients[addr][i] = &dns.Client{
 				Net:          net,
@@ -59,6 +62,16 @@ func (h *DnsHandler) Handle(exchangeMessage *DnsExchangeMessage) {
 	h.msgChan <- exchangeMessage
 }
 
+func (h *DnsHandler) runWorkerRetry() {
+	go func() {
+		for msg := range h.retryChan {
+			select {
+			case h.msgChan <- msg:
+			}
+		}
+	}()
+}
+
 func (h *DnsHandler) runWorker(client *dns.Client, srvAddr string) {
 	go func() {
 		for msg := range h.msgChan {
@@ -67,7 +80,8 @@ func (h *DnsHandler) runWorker(client *dns.Client, srvAddr string) {
 				if msg.retryCount < 3 {
 					log.Printf("DNS[%s] Exchange error[%d]: %s for %s", srvAddr, msg.retryCount, err, msg.Message.Question[0].Name)
 					msg.retryCount++
-					h.msgChan <- msg
+					h.retryChan <- msg
+					slog.Info("Retry")
 				} else {
 					log.Printf("DNS[%s] Exchange[error]: %s", srvAddr, err)
 				}
