@@ -91,3 +91,8 @@ FallbackDNS=8.8.8.8
 systemctl restart systemd-resolved
 resolvectl query ya.ru
 ```
+
+
+## TODO
+
+* Рассмотреть вариант работы с IpSET через этот модуль: https://github.com/nadoo/ipset/blob/master/README.md
