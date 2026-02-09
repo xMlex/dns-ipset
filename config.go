@@ -12,17 +12,20 @@ import (
 )
 
 type Config struct {
-	Debug          bool
-	Host           string              `yaml:"host"`
-	Port           uint16              `yaml:"port"`
-	Nameservers    []string            `yaml:"nameservers"`
-	IpSets         map[string][]string `yaml:"ipsets"`
-	Address        map[string]string   `yaml:"address"`
-	ConfigUpdate   bool                `yaml:"configUpdate"`
-	UpdateInterval time.Duration       `yaml:"updateInterval"`
+	Debug               bool
+	Host                string              `yaml:"host"`
+	Port                uint16              `yaml:"port"`
+	Nameservers         []string            `yaml:"nameservers"`
+	FailbackNameservers []string            `yaml:"failback-nameservers"`
+	RetryCount          int                 `yaml:"retryCount"`
+	RetryFailbackCount  int                 `yaml:"retryFailbackCount"`
+	IpSets              map[string][]string `yaml:"ipsets"`
+	Address             map[string]string   `yaml:"address"`
+	ConfigUpdate        bool                `yaml:"configUpdate"`
+	UpdateInterval      time.Duration       `yaml:"updateInterval"`
 }
 
-func loadConfig() (*Config, error) {
+func loadConfig(fromWatcher bool) (*Config, error) {
 	config := &Config{}
 
 	if _, err := os.Stat(*configFile); err != nil {
@@ -39,7 +42,7 @@ func loadConfig() (*Config, error) {
 		return nil, err
 	}
 
-	if config.ConfigUpdate {
+	if config.ConfigUpdate && !fromWatcher {
 		go configWatcher()
 	}
 
@@ -67,7 +70,7 @@ func configWatcher() {
 		case event := <-watcher.Events:
 			if event.Op&fsnotify.Write == fsnotify.Write {
 				log.Println("Config file updated, reload config")
-				c, err := loadConfig()
+				c, err := loadConfig(true)
 				if err != nil {
 					log.Println("Bad config: ", err)
 				} else {

@@ -17,13 +17,13 @@ var ipSet = NewIpSet()
 var cache dnsCache.Cache
 
 func main() {
-	cache = dnsCache.New(dnsCache.Options{})
+	cache = dnsCache.NewSimpleCache()
 	defer cache.Close()
 	cacheExpireHandle(cache)
 
 	flag.Parse()
 	var err error
-	config, err = loadConfig()
+	config, err = loadConfig(false)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func main() {
 	// attach request handler func
 	dns.HandleFunc(".", handleDnsRequest)
 
-	DnsExchangeHandler = NewDnsHandler(config.Nameservers)
+	DnsExchangeHandler = NewDnsHandler(config.Nameservers, config.FailbackNameservers)
 
 	// start server
 	//port := 5354

@@ -84,7 +84,7 @@ set:
 [Resolve]
 DNS=127.0.0.1
 Domains=~.
-FallbackDNS=8.8.8.8
+# FallbackDNS=8.8.8.8 # FallbackDNS вшит в dns-ipset
 ```
 
 ```shell

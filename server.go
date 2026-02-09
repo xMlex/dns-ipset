@@ -33,7 +33,7 @@ func parseQuery(m *dns.Msg) {
 					if err == nil {
 						rr.Header().Ttl = 30
 						m.Answer = append(m.Answer, rr)
-						addResolvedByAnswer("config", err, name, m)
+						addResolvedByAnswer("config", err, m)
 						processed = true
 						break
 					}
@@ -45,8 +45,11 @@ func parseQuery(m *dns.Msg) {
 		}
 		cachedReq := cache.Get(q.Qtype, q.Name)
 		if cachedReq != nil {
-			m.Answer = cachedReq
-			addResolvedByAnswer("cache", nil, q.Name, m)
+			m.Answer = cachedReq.Value
+			for i := 0; i < len(m.Answer); i++ {
+				m.Answer[i].Header().Ttl = uint32(cachedReq.ExpiresAt.Sub(time.Now()).Seconds())
+			}
+			addResolvedByAnswer("cache", nil, m)
 			continue
 		}
 
@@ -54,8 +57,6 @@ func parseQuery(m *dns.Msg) {
 		if err == nil {
 			m.Answer = r.Answer
 			cache.Set(q.Qtype, q.Name, m.Answer, 0)
-		} else {
-			fmt.Printf("failed to exchange: %v\n", err)
 		}
 	}
 }
@@ -78,12 +79,13 @@ func Lookup(m *dns.Msg) (*dns.Msg, error) {
 	res := make(chan *dns.Msg, 1)
 
 	exchangeMsg := &DnsExchangeMessage{
-		Message:    req,
-		ReturnChan: res,
+		Message:        req,
+		ReturnChan:     res,
+		ReturnFailback: res,
 	}
 	DnsExchangeHandler.Handle(exchangeMsg)
 
-	ticker := time.NewTicker(time.Millisecond * 6000)
+	ticker := time.NewTicker(time.Second * 16)
 	defer ticker.Stop()
 
 	select {
@@ -94,8 +96,8 @@ func Lookup(m *dns.Msg) (*dns.Msg, error) {
 	}
 }
 
-func addResolvedByAnswer(nameserver string, err error, qName string, r *dns.Msg) {
-	rr, err := dns.NewRR(fmt.Sprintf("%s TXT %s", "dns.resolved.via", nameserver))
+func addResolvedByAnswer(name string, err error, r *dns.Msg) {
+	rr, err := dns.NewRR(fmt.Sprintf("%s TXT %s", "dns.resolved.via", name))
 	rr.Header().Ttl = 0
 	r.Answer = append(r.Answer, rr)
 }
