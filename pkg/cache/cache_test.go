@@ -14,7 +14,7 @@ func TestCacheSetGet(t *testing.T) {
 	rr, _ := dns.NewRR("example.com. 1 IN A 1.2.3.4")
 	c.Set(dns.TypeA, "example.com.", []dns.RR{rr}, 50*time.Millisecond)
 	got := c.Get(dns.TypeA, "example.com.")
-	if got == nil || got[0].String() != rr.String() {
+	if got == nil || got.Value[0].String() != rr.String() {
 		t.Fatalf("expected %v, got %v", rr, got)
 	}
 }
