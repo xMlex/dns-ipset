@@ -19,7 +19,6 @@ var cache dnsCache.Cache
 func main() {
 	cache = dnsCache.NewSimpleCache()
 	defer cache.Close()
-	cacheExpireHandle(cache)
 
 	flag.Parse()
 	var err error

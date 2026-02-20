@@ -4,13 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/miekg/dns"
 )
-
-var dnsMsgPool = sync.Pool{New: func() any { return &dns.Msg{} }}
 
 func parseQuery(m *dns.Msg) {
 	defer func() {
@@ -56,7 +53,7 @@ func parseQuery(m *dns.Msg) {
 		r, err := Lookup(m)
 		if err == nil {
 			m.Answer = r.Answer
-			cache.Set(q.Qtype, q.Name, m.Answer, 0)
+			cache.Set(q.Qtype, q.Name, r.Answer, 0)
 		}
 	}
 }

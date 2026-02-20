@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/tls"
-	dnsCache "dns-ipset/pkg/cache"
 	"fmt"
 	"log"
 	"strings"
@@ -151,38 +150,4 @@ func (h *DnsHandler) onAnswerDns(msg *DnsExchangeMessage, in *dns.Msg, srvAddr s
 	if err != nil {
 		fmt.Printf("failed to ipSet : %v\n", err)
 	}
-}
-
-func cacheExpireHandle(cache dnsCache.Cache) {
-	chExpire := make(chan *dnsCache.NotifyExpire)
-	cache.NotifyExpire(chExpire)
-	go func() {
-		res := make(chan *dns.Msg, 1)
-		req := new(dns.Msg)
-
-		ticker := time.NewTicker(time.Second * 16)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case exp, ok := <-chExpire:
-				if !ok {
-					return
-				}
-				req.SetQuestion(dns.Fqdn(exp.Domain), exp.ReqType)
-				exchangeMsg := &DnsExchangeMessage{
-					Message:        req,
-					ReturnChan:     res,
-					ReturnFailback: res,
-				}
-				DnsExchangeHandler.Handle(exchangeMsg)
-				select {
-				case r := <-res:
-					cache.Set(exp.ReqType, exp.Domain, r.Answer, 0)
-				case <-ticker.C:
-					cache.Set(exp.ReqType, exp.Domain, req.Answer, 5)
-				}
-			}
-		}
-	}()
 }
