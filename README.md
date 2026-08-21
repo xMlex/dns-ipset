@@ -99,4 +99,4 @@ resolvectl query ya.ru
 
 ## 👤 Contributors
 
-![Contributors](https://contrib.rocks/image?repo=samber/go-quickwit)
+![Contributors](https://contrib.rocks/image?repo=xMlex/dns-ipset)
