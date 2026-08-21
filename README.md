@@ -99,4 +99,5 @@ resolvectl query ya.ru
 
 ## 👤 Contributors
 
-![Contributors](https://contrib.rocks/image?repo=xMlex/dns-ipset)
+[![Contributors](https://contrib.rocks/image?repo=xMlex/dns-ipset)](https://github.com/xMlex/dns-ipset/graphs/contributors)
+
